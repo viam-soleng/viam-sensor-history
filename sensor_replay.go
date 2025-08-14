@@ -8,8 +8,8 @@ import (
 
 	"github.com/pkg/errors"
 	"go.viam.com/rdk/app"
-	"go.viam.com/rdk/app/data"
 	"go.viam.com/rdk/components/sensor"
+	"go.viam.com/rdk/data" // CORRECTED IMPORT
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/utils/rpc"
@@ -147,7 +147,7 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 	defer client.Close()
 
 	dataClient := client.DataClient()
-	filter := &data.Filter{
+	filter := &data.Filter{ // THIS NOW USES the data package
 		ComponentName: rs.cfg.SourceComponentName,
 		ComponentType: rs.cfg.SourceComponentType,
 		StartTime:     &rs.startTime,
