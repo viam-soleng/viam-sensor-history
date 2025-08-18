@@ -3,7 +3,7 @@
   "module_id": "hunter:sensor-replay",
   "visibility": "private",
   "url": "https://github.com/hunter-volkman/viam-sensor-replay",
-  "description": "Sensor component for historical data replay",
+  "description": "Sensor component for historical data replay from Viam's data management service for testing and simulation",
   "models": [
     {
       "api": "rdk:component:sensor",
@@ -13,7 +13,6 @@
   ],
   "applications": null,
   "markdown_link": "README.md",
-  "entrypoint": "bin/module",
   "first_run": "",
   "build": {
     "build": "make module.tar.gz",
@@ -25,5 +24,6 @@
       "darwin/arm64",
       "windows/amd64"
     ]
-  }
+  },
+  "entrypoint": "bin/module"
 }
