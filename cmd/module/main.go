@@ -7,9 +7,6 @@ import (
 )
 
 func main() {
-    err := module.AddModularResource(sensor.API, sensorreplay.Model)
-    if err != nil {
-        panic(err)
-    }
-    module.ModularMain()
+    // Use the module.Module interface for v0.88.1
+    module.ModularMain(sensorreplay.Model, sensor.API)
 }
