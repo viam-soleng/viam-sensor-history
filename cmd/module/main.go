@@ -1,19 +1,19 @@
 package main
 
 import (
-    "go.viam.com/rdk/components/sensor"
-    "go.viam.com/rdk/module"
-    "go.viam.com/rdk/resource"
-    sensorreplay "github.com/hunter-volkman/sensor-replay"
+	sensorreplay "github.com/hunter-volkman/sensor-replay"
+	"go.viam.com/rdk/components/sensor"
+	"go.viam.com/rdk/module"
+	"go.viam.com/rdk/resource"
 )
 
 func main() {
-    // Create an APIModel that combines the API and Model
-    apiModel := resource.APIModel{
-        API:   sensor.API,
-        Model: sensorreplay.Model,
-    }
-    
-    // Start the module with our APIModel
-    module.ModularMain(apiModel)
+	// Create an APIModel that combines the API and Model
+	apiModel := resource.APIModel{
+		API:   sensor.API,
+		Model: sensorreplay.Model,
+	}
+
+	// Start the module with our APIModel
+	module.ModularMain(apiModel)
 }
