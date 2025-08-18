@@ -8,13 +8,10 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.viam.com/rdk/app"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
-	"go.viam.com/utils/rpc"
-
-	// Using the app package for client creation
-	"go.viam.com/rdk/app"
 )
 
 // Model defines our sensor-replay component model
@@ -169,23 +166,18 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 	fetchStart := time.Now()
 	rs.logger.Info("Starting data fetch for replay sensor...")
 
-	// Establish connection to Viam App using the new API
-	creds := rpc.Credentials{
-		Type:    rpc.CredentialsTypeAPIKey,
-		Payload: rs.cfg.APIKey,
+	// Create Viam client using API key authentication
+	opts := app.Options{
+		BaseURL: "https://app.viam.com",
 	}
 
-	// Updated dial options for v0.88.1
-	dialOpts := rpc.DialOptions{
-		Entity:      rs.cfg.APIKeyID,
-		Credentials: &creds,
-		Insecure:    false,
-	}
-
-	// Use the new client creation API
-	client, err := app.NewClient(ctx, "app.viam.com:443", rs.logger, app.ClientOptions{
-		DialOptions: &dialOpts,
-	})
+	client, err := app.CreateViamClientWithAPIKey(
+		ctx,
+		opts,
+		rs.cfg.APIKey,
+		rs.cfg.APIKeyID,
+		rs.logger,
+	)
 	if err != nil {
 		rs.logger.Errorf("Failed to connect to Viam app: %v", err)
 		return
@@ -196,23 +188,24 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 		}
 	}()
 
-	// Create data client and prepare filter
+	// Create data client
 	dataClient := client.DataClient()
 
-	// Build the filter for TabularDataByFilter - updated for v0.88.1
-	filter := app.Filter{
-		ComponentName: rs.cfg.SourceComponentName,
-		ComponentType: rs.cfg.SourceComponentType,
-		Interval: app.CaptureInterval{
-			Start: rs.startTime,
-			End:   rs.endTime,
+	// Build the filter for TabularDataByFilter
+	filterOpts := &app.DataByFilterOptions{
+		Filter: &app.Filter{
+			ComponentName: rs.cfg.SourceComponentName,
+			ComponentType: rs.cfg.SourceComponentType,
+			Interval: app.CaptureInterval{
+				Start: rs.startTime,
+				End:   rs.endTime,
+			},
+			OrganizationIDs: []string{rs.cfg.OrganizationID},
 		},
-		OrganizationIDs: []string{rs.cfg.OrganizationID}, // Fixed: OrganizationIDs not OrganizationIds
+		Limit: 1000,
 	}
 
 	var allData []replayDataPoint
-	limit := 1000 // Fetch 1000 records at a time
-	var last string
 
 	for {
 		if ctx.Err() != nil {
@@ -220,41 +213,37 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 			return
 		}
 
-		rs.logger.Debugf("Fetching data page (last: %s)...", last)
+		rs.logger.Debugf("Fetching data page (last: %s)...", filterOpts.Last)
 
-		// Fetch a page of data - updated method signature
-		dataResponse, err := dataClient.TabularDataByFilter(ctx, &filter, limit, last)
+		// Fetch a page of data
+		dataResponse, err := dataClient.TabularDataByFilter(ctx, filterOpts)
 		if err != nil {
 			rs.logger.Errorf("Failed to fetch tabular data: %v", err)
 			return
 		}
 
 		// Process the data points
-		for _, dp := range dataResponse {
-			if dp.Data != nil {
-				readings, ok := dp.Data["readings"].(map[string]interface{})
-				if ok && dp.TimeReceived != nil {
+		if dataResponse != nil && dataResponse.TabularData != nil {
+			for _, dp := range dataResponse.TabularData {
+				if dp.Data != nil {
+					// The readings should be in dp.Data
 					allData = append(allData, replayDataPoint{
-						timestamp: *dp.TimeReceived,
-						readings:  readings,
+						timestamp: dp.TimeReceived,
+						readings:  dp.Data,
 					})
 				}
 			}
 		}
 
-		rs.logger.Debugf("Fetched %d data points in this page", len(dataResponse))
+		rs.logger.Debugf("Fetched %d data points in this page", len(dataResponse.TabularData))
 
 		// Check if we've fetched all data or hit cache limit
-		// For v0.88.1, check if we got less than limit (means no more data)
-		if len(dataResponse) < limit || len(allData) >= rs.cfg.CacheSize {
+		if dataResponse.Last == "" || len(dataResponse.TabularData) == 0 || len(allData) >= rs.cfg.CacheSize {
 			break
 		}
-		
-		// Get the last ID from the last item for pagination
-		if len(dataResponse) > 0 {
-			// Assuming there's an ID field - adjust based on actual response structure
-			last = fmt.Sprintf("%d", len(allData)) // Simple pagination
-		}
+
+		// Update the last token for pagination
+		filterOpts.Last = dataResponse.Last
 	}
 
 	if len(allData) == 0 {
