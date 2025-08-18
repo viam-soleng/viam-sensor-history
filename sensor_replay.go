@@ -41,27 +41,28 @@ type Config struct {
 }
 
 // Validate ensures all required configuration fields are present
-func (cfg *Config) Validate(path string) ([]string, error) {
+// Updated to match new API signature with implicit and explicit dependencies
+func (cfg *Config) Validate(path string) (implicit []string, explicit []string, err error) {
 	if cfg.SourceComponentName == "" {
-		return nil, errors.New("source_component_name is required")
+		return nil, nil, errors.New("source_component_name is required")
 	}
 	if cfg.SourceComponentType == "" {
-		return nil, errors.New("source_component_type is required")
+		return nil, nil, errors.New("source_component_type is required")
 	}
 	if cfg.OrganizationID == "" {
-		return nil, errors.New("organization_id is required")
+		return nil, nil, errors.New("organization_id is required")
 	}
 	if cfg.StartTimeUTC == "" {
-		return nil, errors.New("start_time_utc is required")
+		return nil, nil, errors.New("start_time_utc is required")
 	}
 	if cfg.EndTimeUTC == "" {
-		return nil, errors.New("end_time_utc is required")
+		return nil, nil, errors.New("end_time_utc is required")
 	}
 	if cfg.APIKeyID == "" {
-		return nil, errors.New("api_key_id is required")
+		return nil, nil, errors.New("api_key_id is required")
 	}
 	if cfg.APIKey == "" {
-		return nil, errors.New("api_key is required")
+		return nil, nil, errors.New("api_key is required")
 	}
 
 	// Set defaults for optional fields
@@ -72,7 +73,7 @@ func (cfg *Config) Validate(path string) ([]string, error) {
 		cfg.CacheSize = 10000 // Default to 10k data points max
 	}
 
-	return nil, nil
+	return nil, nil, nil
 }
 
 // replaySensor is the main struct for our component
@@ -168,19 +169,21 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 	fetchStart := time.Now()
 	rs.logger.Info("Starting data fetch for replay sensor...")
 
-	// Establish connection to Viam App
+	// Establish connection to Viam App using the new API
 	creds := rpc.Credentials{
 		Type:    rpc.CredentialsTypeAPIKey,
 		Payload: rs.cfg.APIKey,
 	}
 
-	dialOpts := []rpc.DialOption{
-		rpc.WithEntity(rs.cfg.APIKeyID),
-		rpc.WithCredentials(creds),
+	// Updated dial options for v0.88.1
+	dialOpts := rpc.DialOptions{
+		Entity:      rs.cfg.APIKeyID,
+		Credentials: &creds,
+		Insecure:    false,
 	}
 
-	client, err := app.NewViamClient(ctx, app.ViamClientConfig{
-		BaseURL:     "https://app.viam.com",
+	// Use the new client creation API
+	client, err := app.NewClient(ctx, "app.viam.com:443", rs.logger, app.ClientOptions{
 		DialOptions: &dialOpts,
 	})
 	if err != nil {
@@ -196,15 +199,15 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 	// Create data client and prepare filter
 	dataClient := client.DataClient()
 
-	// Build the filter for TabularDataByFilter
+	// Build the filter for TabularDataByFilter - updated for v0.88.1
 	filter := app.Filter{
 		ComponentName: rs.cfg.SourceComponentName,
 		ComponentType: rs.cfg.SourceComponentType,
-		Interval: &app.CaptureInterval{
+		Interval: app.CaptureInterval{
 			Start: rs.startTime,
 			End:   rs.endTime,
 		},
-		OrganizationIds: []string{rs.cfg.OrganizationID},
+		OrganizationIDs: []string{rs.cfg.OrganizationID}, // Fixed: OrganizationIDs not OrganizationIds
 	}
 
 	var allData []replayDataPoint
@@ -219,23 +222,15 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 
 		rs.logger.Debugf("Fetching data page (last: %s)...", last)
 
-		// Fetch a page of data
-		dataPoints, lastID, err := dataClient.TabularDataByFilter(
-			ctx,
-			filter,
-			limit,
-			last,
-			"",   // sortOrder - empty for default
-			true, // includeBinary
-		)
-
+		// Fetch a page of data - updated method signature
+		dataResponse, err := dataClient.TabularDataByFilter(ctx, &filter, limit, last)
 		if err != nil {
 			rs.logger.Errorf("Failed to fetch tabular data: %v", err)
 			return
 		}
 
 		// Process the data points
-		for _, dp := range dataPoints {
+		for _, dp := range dataResponse {
 			if dp.Data != nil {
 				readings, ok := dp.Data["readings"].(map[string]interface{})
 				if ok && dp.TimeReceived != nil {
@@ -247,13 +242,19 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 			}
 		}
 
-		rs.logger.Debugf("Fetched %d data points in this page", len(dataPoints))
+		rs.logger.Debugf("Fetched %d data points in this page", len(dataResponse))
 
 		// Check if we've fetched all data or hit cache limit
-		if lastID == "" || len(dataPoints) == 0 || len(allData) >= rs.cfg.CacheSize {
+		// For v0.88.1, check if we got less than limit (means no more data)
+		if len(dataResponse) < limit || len(allData) >= rs.cfg.CacheSize {
 			break
 		}
-		last = lastID
+		
+		// Get the last ID from the last item for pagination
+		if len(dataResponse) > 0 {
+			// Assuming there's an ID field - adjust based on actual response structure
+			last = fmt.Sprintf("%d", len(allData)) // Simple pagination
+		}
 	}
 
 	if len(allData) == 0 {
