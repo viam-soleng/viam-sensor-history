@@ -12,11 +12,8 @@ This model implements the `rdk:component:sensor` API by simulating a live sensor
 {
   "source_component_name": "<string>",
   "source_component_type": "<string>",
-  "organization_id": "<string>",
   "start_time_utc": "<string>",
   "end_time_utc": "<string>",
-  "api_key_id": "<your-key-id>",
-  "api_key": "<your-api-key>",
   "loop": false,
   "speed_multiplier": 1.0,
   "cache_size": 10000
@@ -31,11 +28,8 @@ The following attributes are available for this model:
 |---------------|--------|-----------|----------------------------|
 | `source_component_name` | string  | Required  | The name of the original sensor component whose data will be replayed (e.g., "cpu"). |
 | `source_component_type` | string | Required  | The type of the original sensor component (e.g., "rdk:component:sensor"). |
-| `organization_id` | string | Required  | The ID of the Viam organization where the data is stored. |
 | `start_time_utc` | string | Required  | The start of the historical time window in RFC3339 format (e.g., "2025-08-14T15:30:00Z"). |
 | `end_time_utc` | string | Required  | The end of the historical time window in RFC3339 format. |
-| `api_key_id` | string | Required  | The ID of the Viam API key with permissions to read data. |
-| `api_key` | string | Required  | The Viam API key. |
 | `loop` | boolean | Optional  | If `true`, the replay will restart from the beginning upon completion. Defaults to `false`. |
 | `speed_multiplier` | float | Optional  | Playback speed multiplier (e.g., 2.0 for double speed, 0.5 for half speed). Defaults to 1.0. |
 | `cache_size` | int | Optional  | Maximum number of data points to cache in memory. Defaults to 10000. |
@@ -46,11 +40,8 @@ The following attributes are available for this model:
 {
   "source_component_name": "cpu",
   "source_component_type": "rdk:component:sensor",
-  "organization_id": "31641b32-74e8-4e1c-9509-2cc6d45b45ff",
   "start_time_utc": "2025-08-14T15:30:00Z",
   "end_time_utc": "2025-08-14T15:45:00Z",
-  "api_key_id": "$VIAM_API_KEY_ID",
-  "api_key": "$VIAM_API_KEY",
   "loop": true,
   "speed_multiplier": 60.0,
   "cache_size": 10000
