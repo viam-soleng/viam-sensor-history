@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"sensorreplay"
+	sensor "go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
-	sensor "go.viam.com/rdk/components/sensor"
+	"sensorreplay"
 )
 
 func main() {
