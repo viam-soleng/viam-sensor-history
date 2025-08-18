@@ -1,6 +1,4 @@
-MODULE_NAME := sensor-replay
 MODULE_BINARY := bin/module
-GO_FILES := $(shell find . -name '*.go' -not -path './vendor/*')
 
 .PHONY: all build clean test lint setup module update
 
@@ -27,20 +25,14 @@ clean:
 	@echo "Cleaning build artifacts..."
 	@rm -rf bin/
 	@rm -f module.tar.gz
-	@rm -f coverage.out
 
 test:
 	@echo "Running tests..."
-	go test -v -cover ./...
+	go test ./...
 
 lint:
 	@echo "Running linter..."
-	@if command -v golangci-lint &> /dev/null; then \
-		golangci-lint run; \
-	else \
-		gofmt -s -w .; \
-		go vet ./...; \
-	fi
+	gofmt -s -w .
 
 setup:
 	@echo "Setting up module dependencies..."
@@ -53,22 +45,11 @@ update:
 	go get -u go.viam.com/utils@latest
 	go mod tidy
 
-run-local: build
-	@echo "Running module locally..."
-	$(MODULE_BINARY)
-
-debug: 
-	@echo "Building debug version..."
-	go build -gcflags="all=-N -l" -o $(MODULE_BINARY) cmd/module/main.go
-
 # Cross-compilation targets
 build-linux-arm64:
 	GOOS=linux GOARCH=arm64 go build -o bin/module-linux-arm64 cmd/module/main.go
 
-build-linux-amd64:
-	GOOS=linux GOARCH=amd64 go build -o bin/module-linux-amd64 cmd/module/main.go
-
 build-darwin-arm64:
 	GOOS=darwin GOARCH=arm64 go build -o bin/module-darwin-arm64 cmd/module/main.go
 
-build-all: build-linux-arm64 build-linux-amd64 build-darwin-arm64
+build-all: build-linux-arm64 build-darwin-arm64
