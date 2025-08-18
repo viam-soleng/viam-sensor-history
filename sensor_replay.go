@@ -400,8 +400,13 @@ func (rs *replaySensor) Readings(ctx context.Context, extra map[string]interface
 
 // DoCommand implements custom commands for the sensor
 func (rs *replaySensor) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-	// Get statistics command
-	if _, ok := cmd["get_stats"]; ok {
+	command, ok := cmd["command"].(string)
+	if !ok {
+		return nil, errors.New("command field is required")
+	}
+
+	switch command {
+	case "get_stats":
 		rs.mu.RLock()
 		defer rs.mu.RUnlock()
 
@@ -413,10 +418,8 @@ func (rs *replaySensor) DoCommand(ctx context.Context, cmd map[string]interface{
 			"loops_completed":   rs.stats.loopsCompleted,
 			"last_reading_time": rs.stats.lastReadingTime.Format(time.RFC3339),
 		}, nil
-	}
 
-	// Reset replay command
-	if _, ok := cmd["reset"]; ok {
+	case "reset":
 		rs.mu.Lock()
 		defer rs.mu.Unlock()
 
@@ -426,17 +429,20 @@ func (rs *replaySensor) DoCommand(ctx context.Context, cmd map[string]interface{
 		rs.logger.Info("Replay reset to beginning")
 
 		return map[string]interface{}{"status": "reset"}, nil
-	}
 
-	// Jump to specific time command
-	if jumpTo, ok := cmd["jump_to_percent"]; ok {
-		percent, ok := jumpTo.(float64)
+	case "jump_to_percent":
+		percent, ok := cmd["percent"].(float64)
 		if !ok {
-			return nil, errors.New("jump_to_percent must be a number between 0 and 100")
+			// Try to get it as int and convert
+			if percentInt, ok := cmd["percent"].(int); ok {
+				percent = float64(percentInt)
+			} else {
+				return nil, errors.New("percent parameter is required and must be a number between 0 and 100")
+			}
 		}
 
 		if percent < 0 || percent > 100 {
-			return nil, errors.New("jump_to_percent must be between 0 and 100")
+			return nil, errors.New("percent must be between 0 and 100")
 		}
 
 		rs.mu.Lock()
@@ -460,9 +466,12 @@ func (rs *replaySensor) DoCommand(ctx context.Context, cmd map[string]interface{
 				"timestamp": targetTime.Format(time.RFC3339),
 			}, nil
 		}
-	}
 
-	return nil, errors.New("unknown command")
+		return map[string]interface{}{"status": "no_data"}, nil
+
+	default:
+		return nil, errors.Errorf("unknown command: %s", command)
+	}
 }
 
 // Close gracefully shuts down the sensor
