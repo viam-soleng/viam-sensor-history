@@ -29,11 +29,8 @@ type replayDataPoint struct {
 type Config struct {
 	SourceComponentName string  `json:"source_component_name"`
 	SourceComponentType string  `json:"source_component_type"`
-	OrganizationID      string  `json:"organization_id"`
 	StartTimeUTC        string  `json:"start_time_utc"`
 	EndTimeUTC          string  `json:"end_time_utc"`
-	APIKeyID            string  `json:"api_key_id"`
-	APIKey              string  `json:"api_key"`
 	Loop                bool    `json:"loop"`
 	SpeedMultiplier     float64 `json:"speed_multiplier,omitempty"` // Optional: replay at different speeds
 	CacheSize           int     `json:"cache_size,omitempty"`       // Optional: limit memory usage
@@ -48,9 +45,6 @@ func (cfg *Config) Validate(path string) (implicit []string, explicit []string, 
 	if cfg.SourceComponentType == "" {
 		return nil, nil, errors.New("source_component_type is required")
 	}
-	if cfg.OrganizationID == "" {
-		return nil, nil, errors.New("organization_id is required")
-	}
 	if cfg.StartTimeUTC == "" {
 		return nil, nil, errors.New("start_time_utc is required")
 	}
@@ -58,10 +52,7 @@ func (cfg *Config) Validate(path string) (implicit []string, explicit []string, 
 		return nil, nil, errors.New("end_time_utc is required")
 	}
 
-	// API credentials are now optional in config if environment variables are available
-	// We'll validate them later in fetchAndPrepareData
-
-	// Set defaults for optional fields
+	// Defaults
 	if cfg.SpeedMultiplier <= 0 {
 		cfg.SpeedMultiplier = 1.0
 	}
@@ -160,68 +151,39 @@ func (rs *replaySensor) Reconfigure(ctx context.Context, deps resource.Dependenc
 	return nil
 }
 
-// resolveAPICredentials resolves API key and key ID from config or environment
+// mustEnv returns the env var value or a descriptive error if missing/empty
+func mustEnv(name string) (string, error) {
+	v, ok := os.LookupEnv(name)
+	if !ok || strings.TrimSpace(v) == "" {
+		return "", errors.Errorf("%s is not set; this module reads credentials from the Viam module environment", name)
+	}
+	return v, nil
+}
+
+// resolveAPICredentials reads API credentials strictly from environment
 func (rs *replaySensor) resolveAPICredentials() (string, string, error) {
-	apiKeyID := rs.cfg.APIKeyID
-	apiKey := rs.cfg.APIKey
-
-	// Resolve API Key ID
-	// Support three patterns:
-	// 1. Empty string - use environment variable
-	// 2. $VAR_NAME or ${VAR_NAME} - explicit environment variable reference
-	// 3. Direct value - use as-is
-	if apiKeyID == "" {
-		if envVal := os.Getenv("VIAM_API_KEY_ID"); envVal != "" {
-			apiKeyID = envVal
-			rs.logger.Debug("Using VIAM_API_KEY_ID from environment")
-		} else {
-			return "", "", errors.New("api_key_id not provided in config and VIAM_API_KEY_ID not set in environment")
-		}
-	} else if strings.HasPrefix(apiKeyID, "$") {
-		// Handle $VAR_NAME or ${VAR_NAME} format
-		envVarName := strings.TrimPrefix(apiKeyID, "$")
-		envVarName = strings.Trim(envVarName, "{}")
-		if envVarName == "" {
-			envVarName = "VIAM_API_KEY_ID" // Default if just "$" is provided
-		}
-		if envVal := os.Getenv(envVarName); envVal != "" {
-			apiKeyID = envVal
-			rs.logger.Debugf("Using %s from environment for API Key ID", envVarName)
-		} else {
-			return "", "", errors.Errorf("environment variable %s not set", envVarName)
-		}
+	apiKeyID, err := mustEnv("VIAM_API_KEY_ID")
+	if err != nil {
+		return "", "", err
+	}
+	apiKey, err := mustEnv("VIAM_API_KEY")
+	if err != nil {
+		return "", "", err
 	}
 
-	// Resolve API Key
-	if apiKey == "" {
-		if envVal := os.Getenv("VIAM_API_KEY"); envVal != "" {
-			apiKey = envVal
-			rs.logger.Debug("Using VIAM_API_KEY from environment")
-		} else {
-			return "", "", errors.New("api_key not provided in config and VIAM_API_KEY not set in environment")
-		}
-	} else if strings.HasPrefix(apiKey, "$") {
-		// Handle $VAR_NAME or ${VAR_NAME} format
-		envVarName := strings.TrimPrefix(apiKey, "$")
-		envVarName = strings.Trim(envVarName, "{}")
-		if envVarName == "" {
-			envVarName = "VIAM_API_KEY" // Default if just "$" is provided
-		}
-		if envVal := os.Getenv(envVarName); envVal != "" {
-			apiKey = envVal
-			rs.logger.Debugf("Using %s from environment for API Key", envVarName)
-		} else {
-			return "", "", errors.Errorf("environment variable %s not set", envVarName)
-		}
-	}
-
-	// Security: Log presence but never the actual values
-	rs.logger.Debugf("API Key ID resolved: %s", apiKeyID)
-	if apiKey != "" {
-		rs.logger.Debug("API Key resolved (value hidden for security)")
-	}
-
+	// Indicate presence only
+	rs.logger.Debug("Using VIAM_API_KEY_ID and VIAM_API_KEY from module environment (values hidden)")
 	return apiKeyID, apiKey, nil
+}
+
+// resolveOrganizationID uses VIAM_PRIMARY_ORG_ID from the module environment
+func (rs *replaySensor) resolveOrganizationID() (string, error) {
+	org, ok := os.LookupEnv("VIAM_PRIMARY_ORG_ID")
+	if !ok || strings.TrimSpace(org) == "" {
+		return "", errors.New("VIAM_PRIMARY_ORG_ID is not set in the module environment")
+	}
+	rs.logger.Debug("Using VIAM_PRIMARY_ORG_ID from module environment")
+	return org, nil
 }
 
 // fetchAndPrepareData connects to the Viam app, downloads, and prepares the data for replay
@@ -229,10 +191,15 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 	fetchStart := time.Now()
 	rs.logger.Info("Starting data fetch for replay sensor...")
 
-	// Resolve API credentials from config or environment
+	// Resolve creds and org strictly from environment / safe defaults
 	apiKeyID, apiKey, err := rs.resolveAPICredentials()
 	if err != nil {
 		rs.logger.Errorf("Failed to resolve API credentials: %v", err)
+		return
+	}
+	orgID, err := rs.resolveOrganizationID()
+	if err != nil {
+		rs.logger.Errorf("Failed to resolve organization_id: %v", err)
 		return
 	}
 
@@ -270,7 +237,7 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 				Start: rs.startTime,
 				End:   rs.endTime,
 			},
-			OrganizationIDs: []string{rs.cfg.OrganizationID},
+			OrganizationIDs: []string{orgID},
 		},
 		Limit: 1000,
 	}
@@ -296,7 +263,6 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 		if dataResponse != nil && dataResponse.TabularData != nil {
 			for _, dp := range dataResponse.TabularData {
 				if dp.Data != nil {
-					// Store the full data object (which includes "readings" wrapper)
 					allData = append(allData, replayDataPoint{
 						timestamp: dp.TimeReceived,
 						readings:  dp.Data,
@@ -442,14 +408,11 @@ func (rs *replaySensor) Readings(ctx context.Context, extra map[string]interface
 	// Check if the data has "readings" wrapper and unwrap it
 	result := make(map[string]interface{})
 
-	// Check if foundReading contains a "readings" key
 	if readings, ok := foundReading["readings"].(map[string]interface{}); ok {
-		// Data is wrapped in "readings", unwrap it to match original sensor format
 		for k, v := range readings {
 			result[k] = v
 		}
 	} else {
-		// Data is not wrapped, use as-is
 		for k, v := range foundReading {
 			result[k] = v
 		}
@@ -503,7 +466,6 @@ func (rs *replaySensor) DoCommand(ctx context.Context, cmd map[string]interface{
 	case "jump_to_percent":
 		percent, ok := cmd["percent"].(float64)
 		if !ok {
-			// Try to get it as int and convert
 			if percentInt, ok := cmd["percent"].(int); ok {
 				percent = float64(percentInt)
 			} else {
