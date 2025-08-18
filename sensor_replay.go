@@ -226,7 +226,7 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 		if dataResponse != nil && dataResponse.TabularData != nil {
 			for _, dp := range dataResponse.TabularData {
 				if dp.Data != nil {
-					// The readings should be in dp.Data
+					// Store the full data object (which includes "readings" wrapper)
 					allData = append(allData, replayDataPoint{
 						timestamp: dp.TimeReceived,
 						readings:  dp.Data,
@@ -369,10 +369,20 @@ func (rs *replaySensor) Readings(ctx context.Context, extra map[string]interface
 		}, nil
 	}
 
-	// Add metadata to the reading
+	// Check if the data has "readings" wrapper and unwrap it
 	result := make(map[string]interface{})
-	for k, v := range foundReading {
-		result[k] = v
+
+	// Check if foundReading contains a "readings" key
+	if readings, ok := foundReading["readings"].(map[string]interface{}); ok {
+		// Data is wrapped in "readings", unwrap it to match original sensor format
+		for k, v := range readings {
+			result[k] = v
+		}
+	} else {
+		// Data is not wrapped, use as-is
+		for k, v := range foundReading {
+			result[k] = v
+		}
 	}
 
 	// Add replay metadata if requested
