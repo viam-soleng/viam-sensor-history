@@ -3,7 +3,9 @@ package sensorreplay
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,12 +57,9 @@ func (cfg *Config) Validate(path string) (implicit []string, explicit []string, 
 	if cfg.EndTimeUTC == "" {
 		return nil, nil, errors.New("end_time_utc is required")
 	}
-	if cfg.APIKeyID == "" {
-		return nil, nil, errors.New("api_key_id is required")
-	}
-	if cfg.APIKey == "" {
-		return nil, nil, errors.New("api_key is required")
-	}
+
+	// API credentials are now optional in config if environment variables are available
+	// We'll validate them later in fetchAndPrepareData
 
 	// Set defaults for optional fields
 	if cfg.SpeedMultiplier <= 0 {
@@ -161,10 +160,81 @@ func (rs *replaySensor) Reconfigure(ctx context.Context, deps resource.Dependenc
 	return nil
 }
 
+// resolveAPICredentials resolves API key and key ID from config or environment
+func (rs *replaySensor) resolveAPICredentials() (string, string, error) {
+	apiKeyID := rs.cfg.APIKeyID
+	apiKey := rs.cfg.APIKey
+
+	// Resolve API Key ID
+	// Support three patterns:
+	// 1. Empty string - use environment variable
+	// 2. $VAR_NAME or ${VAR_NAME} - explicit environment variable reference
+	// 3. Direct value - use as-is
+	if apiKeyID == "" {
+		if envVal := os.Getenv("VIAM_API_KEY_ID"); envVal != "" {
+			apiKeyID = envVal
+			rs.logger.Debug("Using VIAM_API_KEY_ID from environment")
+		} else {
+			return "", "", errors.New("api_key_id not provided in config and VIAM_API_KEY_ID not set in environment")
+		}
+	} else if strings.HasPrefix(apiKeyID, "$") {
+		// Handle $VAR_NAME or ${VAR_NAME} format
+		envVarName := strings.TrimPrefix(apiKeyID, "$")
+		envVarName = strings.Trim(envVarName, "{}")
+		if envVarName == "" {
+			envVarName = "VIAM_API_KEY_ID" // Default if just "$" is provided
+		}
+		if envVal := os.Getenv(envVarName); envVal != "" {
+			apiKeyID = envVal
+			rs.logger.Debugf("Using %s from environment for API Key ID", envVarName)
+		} else {
+			return "", "", errors.Errorf("environment variable %s not set", envVarName)
+		}
+	}
+
+	// Resolve API Key
+	if apiKey == "" {
+		if envVal := os.Getenv("VIAM_API_KEY"); envVal != "" {
+			apiKey = envVal
+			rs.logger.Debug("Using VIAM_API_KEY from environment")
+		} else {
+			return "", "", errors.New("api_key not provided in config and VIAM_API_KEY not set in environment")
+		}
+	} else if strings.HasPrefix(apiKey, "$") {
+		// Handle $VAR_NAME or ${VAR_NAME} format
+		envVarName := strings.TrimPrefix(apiKey, "$")
+		envVarName = strings.Trim(envVarName, "{}")
+		if envVarName == "" {
+			envVarName = "VIAM_API_KEY" // Default if just "$" is provided
+		}
+		if envVal := os.Getenv(envVarName); envVal != "" {
+			apiKey = envVal
+			rs.logger.Debugf("Using %s from environment for API Key", envVarName)
+		} else {
+			return "", "", errors.Errorf("environment variable %s not set", envVarName)
+		}
+	}
+
+	// Security: Log presence but never the actual values
+	rs.logger.Debugf("API Key ID resolved: %s", apiKeyID)
+	if apiKey != "" {
+		rs.logger.Debug("API Key resolved (value hidden for security)")
+	}
+
+	return apiKeyID, apiKey, nil
+}
+
 // fetchAndPrepareData connects to the Viam app, downloads, and prepares the data for replay
 func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 	fetchStart := time.Now()
 	rs.logger.Info("Starting data fetch for replay sensor...")
+
+	// Resolve API credentials from config or environment
+	apiKeyID, apiKey, err := rs.resolveAPICredentials()
+	if err != nil {
+		rs.logger.Errorf("Failed to resolve API credentials: %v", err)
+		return
+	}
 
 	// Create Viam client using API key authentication
 	opts := app.Options{
@@ -174,8 +244,8 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 	client, err := app.CreateViamClientWithAPIKey(
 		ctx,
 		opts,
-		rs.cfg.APIKey,
-		rs.cfg.APIKeyID,
+		apiKey,
+		apiKeyID,
 		rs.logger,
 	)
 	if err != nil {
