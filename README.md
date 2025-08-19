@@ -32,7 +32,7 @@ The following attributes are available for this model:
 | `end_time_utc` | string | Required  | The end of the historical time window in RFC3339 format. |
 | `loop` | boolean | Optional  | If `true`, the replay will restart from the beginning upon completion. Defaults to `false`. |
 | `speed_multiplier` | float | Optional  | Playback speed multiplier (e.g., 2.0 for double speed, 0.5 for half speed). Defaults to 1.0. |
-| `cache_size` | int | Optional  | Maximum number of data points to cache in memory. Defaults to 10000. |
+| `cache_size` | integer | Optional  | Maximum number of data points to cache in memory. Defaults to 10000. |
 
 #### Example Configuration
 
