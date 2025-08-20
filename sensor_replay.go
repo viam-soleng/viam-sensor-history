@@ -32,12 +32,12 @@ type Config struct {
 	StartTimeUTC        string  `json:"start_time_utc"`
 	EndTimeUTC          string  `json:"end_time_utc"`
 	Loop                bool    `json:"loop"`
-	SpeedMultiplier     float64 `json:"speed_multiplier,omitempty"` // Optional: replay at different speeds
-	CacheSize           int     `json:"cache_size,omitempty"`       // Optional: limit memory usage
+	SpeedMultiplier     float64 `json:"speed_multiplier"`
+	CacheSize           int     `json:"cache_size,omitempty"`
+	IncludeMetadata     bool    `json:"include_metadata,omitempty"`
 }
 
 // Validate ensures all required configuration fields are present
-// Updated to match new API signature with implicit and explicit dependencies
 func (cfg *Config) Validate(path string) (implicit []string, explicit []string, err error) {
 	if cfg.SourceComponentName == "" {
 		return nil, nil, errors.New("source_component_name is required")
@@ -51,13 +51,13 @@ func (cfg *Config) Validate(path string) (implicit []string, explicit []string, 
 	if cfg.EndTimeUTC == "" {
 		return nil, nil, errors.New("end_time_utc is required")
 	}
+	if cfg.SpeedMultiplier <= 0 {
+		return nil, nil, errors.New("speed_multiplier is required and must be positive")
+	}
 
 	// Defaults
-	if cfg.SpeedMultiplier <= 0 {
-		cfg.SpeedMultiplier = 1.0
-	}
 	if cfg.CacheSize <= 0 {
-		cfg.CacheSize = 10000 // Default to 10k data points max
+		cfg.CacheSize = 10000
 	}
 
 	return nil, nil, nil
@@ -75,7 +75,7 @@ type replaySensor struct {
 	replayStartTime time.Time
 	isReady         bool
 	currentIndex    int
-	loopCount       int // Track number of loops completed
+	loopCount       int
 	cancelCtx       context.Context
 	cancelFunc      context.CancelFunc
 
@@ -142,8 +142,12 @@ func (rs *replaySensor) Reconfigure(ctx context.Context, deps resource.Dependenc
 		return errors.New("end_time_utc must be after start_time_utc")
 	}
 
-	rs.logger.Infof("Configuring sensor-replay for component '%s' from %s to %s",
-		rs.cfg.SourceComponentName, rs.startTime.Format(time.RFC3339), rs.endTime.Format(time.RFC3339))
+	rs.logger.Infof("Configuring sensor-replay for component '%s' from %s to %s (speed: %.1fx, metadata: %t)",
+		rs.cfg.SourceComponentName,
+		rs.startTime.Format(time.RFC3339),
+		rs.endTime.Format(time.RFC3339),
+		rs.cfg.SpeedMultiplier,
+		rs.cfg.IncludeMetadata)
 
 	// Fetch data in the background to not block startup
 	go rs.fetchAndPrepareData(rs.cancelCtx)
@@ -176,11 +180,11 @@ func (rs *replaySensor) resolveAPICredentials() (string, string, error) {
 	return apiKeyID, apiKey, nil
 }
 
-// resolveOrganizationID uses VIAM_PRIMARY_ORG_ID from the module environment
+// resolveOrganizationID uses VIAM_PRIMARY_ORG_ID from module environment
 func (rs *replaySensor) resolveOrganizationID() (string, error) {
 	org, ok := os.LookupEnv("VIAM_PRIMARY_ORG_ID")
 	if !ok || strings.TrimSpace(org) == "" {
-		return "", errors.New("VIAM_PRIMARY_ORG_ID is not set in the module environment")
+		return "", errors.New("VIAM_PRIMARY_ORG_ID is not set in module environment")
 	}
 	rs.logger.Debug("Using VIAM_PRIMARY_ORG_ID from module environment")
 	return org, nil
@@ -418,8 +422,9 @@ func (rs *replaySensor) Readings(ctx context.Context, extra map[string]interface
 		}
 	}
 
-	// Add replay metadata if requested
-	if extra != nil && extra["include_metadata"] == true {
+	// Add replay metadata if configured or requested via extra
+	includeMetadata := rs.cfg.IncludeMetadata || (extra != nil && extra["include_metadata"] == true)
+	if includeMetadata {
 		result["_replay_metadata"] = map[string]interface{}{
 			"historical_timestamp": rs.replayData[foundIndex].timestamp.Format(time.RFC3339),
 			"replay_position":      fmt.Sprintf("%d/%d", foundIndex+1, len(rs.replayData)),
