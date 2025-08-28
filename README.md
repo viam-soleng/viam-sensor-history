@@ -1,10 +1,10 @@
-# Module sensor-replay 
+# Module sensor-playback
 
-A Viam `sensor` component for historical data replay from Viam's data management service.
+A Viam `sensor` component for historical data playback from Viam's data management service.
 
-## Model hunter:sensor-replay:sensor
+## Model hunter:sensor-playback:sensor
 
-This model implements the `rdk:component:sensor` API by simulating a live sensor and fetching a dataset from a specified time range and replaying it in real-time with configurable speed and looping.
+This model implements the `rdk:component:sensor` API by simulating a live sensor and fetching a dataset from a specified time range and playback in real-time with configurable speed and looping.
 
 ### Configuration
 
@@ -26,11 +26,11 @@ The following attributes are available for this model:
 
 | Name          | Type   | Inclusion | Description                |
 |---------------|--------|-----------|----------------------------|
-| `source_component_name` | string  | Required  | The name of the original sensor component whose data will be replayed (e.g., "cpu"). |
+| `source_component_name` | string  | Required  | The name of the original sensor component for data playback (e.g., "cpu"). |
 | `source_component_type` | string | Required  | The type of the original sensor component (e.g., "rdk:component:sensor"). |
 | `start_time_utc` | string | Required  | The start of the historical time window in RFC3339 format (e.g., "2025-08-14T15:30:00Z"). |
 | `end_time_utc` | string | Required  | The end of the historical time window in RFC3339 format. |
-| `loop` | boolean | Optional  | If `true`, the replay will restart from the beginning upon completion. Defaults to `false`. |
+| `loop` | boolean | Optional  | If `true`, the playback will restart from the beginning upon completion. Defaults to `false`. |
 | `speed_multiplier` | float | Optional  | Playback speed multiplier (e.g., 2.0 for double speed, 0.5 for half speed). Defaults to 1.0. |
 | `cache_size` | integer | Optional  | Maximum number of data points to cache in memory. Defaults to 10000. |
 
@@ -50,11 +50,11 @@ The following attributes are available for this model:
 
 ### DoCommand
 
-The sensor-replay model supports the following DoCommand operations:
+The sensor-playback model supports the following DoCommand operations:
 
 #### Get Statistics
 
-Returns current replay statistics.
+Returns current playback statistics.
 
 ```json
 {
@@ -75,9 +75,9 @@ Response:
 }
 ```
 
-#### Reset Replay
+#### Reset Playback
 
-Resets the replay to the beginning of the dataset.
+Resets the playback to the beginning of the dataset.
 
 ```json
 {

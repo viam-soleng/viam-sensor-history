@@ -1,4 +1,4 @@
-module github.com/hunter-volkman/sensor-replay
+module github.com/hunter-volkman/sensor-playback
 
 go 1.23.8
 

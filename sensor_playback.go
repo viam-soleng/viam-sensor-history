@@ -1,4 +1,4 @@
-package sensorreplay
+package sensorplayback
 
 import (
 	"context"
@@ -16,16 +16,16 @@ import (
 	"go.viam.com/rdk/resource"
 )
 
-// Model defines our sensor-replay component model
-var Model = resource.NewModel("hunter", "sensor-replay", "sensor")
+// Model defines our sensor-playback component model
+var Model = resource.NewModel("hunter", "sensor-playback", "sensor")
 
-// replayDataPoint stores a single historical reading with its timestamp
-type replayDataPoint struct {
+// playbackDataPoint stores a single historical reading with its timestamp
+type playbackDataPoint struct {
 	timestamp time.Time
 	readings  map[string]interface{}
 }
 
-// Config holds the configuration attributes for the replay sensor
+// Config holds the configuration attributes for the playback sensor
 type Config struct {
 	SourceComponentName string  `json:"source_component_name"`
 	SourceComponentType string  `json:"source_component_type"`
@@ -63,21 +63,21 @@ func (cfg *Config) Validate(path string) (implicit []string, explicit []string, 
 	return nil, nil, nil
 }
 
-// replaySensor is the main struct for our component
-type replaySensor struct {
+// playbackSensor is the main struct for our component
+type playbackSensor struct {
 	resource.Named
-	mu              sync.RWMutex
-	logger          logging.Logger
-	cfg             *Config
-	startTime       time.Time
-	endTime         time.Time
-	replayData      []replayDataPoint
-	replayStartTime time.Time
-	isReady         bool
-	currentIndex    int
-	loopCount       int
-	cancelCtx       context.Context
-	cancelFunc      context.CancelFunc
+	mu                sync.RWMutex
+	logger            logging.Logger
+	cfg               *Config
+	startTime         time.Time
+	endTime           time.Time
+	playbackData      []playbackDataPoint
+	playbackStartTime time.Time
+	isReady           bool
+	currentIndex      int
+	loopCount         int
+	cancelCtx         context.Context
+	cancelFunc        context.CancelFunc
 
 	// Statistics
 	stats struct {
@@ -90,14 +90,14 @@ type replaySensor struct {
 
 func init() {
 	registration := resource.Registration[sensor.Sensor, *Config]{
-		Constructor: newReplaySensor,
+		Constructor: newPlaybackSensor,
 	}
 	resource.RegisterComponent(sensor.API, Model, registration)
 }
 
-// newReplaySensor is the constructor for the replay sensor
-func newReplaySensor(ctx context.Context, deps resource.Dependencies, conf resource.Config, logger logging.Logger) (sensor.Sensor, error) {
-	rs := &replaySensor{
+// newPlaybackSensor is the constructor for the playback sensor
+func newPlaybackSensor(ctx context.Context, deps resource.Dependencies, conf resource.Config, logger logging.Logger) (sensor.Sensor, error) {
+	rs := &playbackSensor{
 		Named:  conf.ResourceName().AsNamed(),
 		logger: logger,
 	}
@@ -108,8 +108,29 @@ func newReplaySensor(ctx context.Context, deps resource.Dependencies, conf resou
 	return rs, nil
 }
 
+// NewSensor creates a new playback sensor (exported constructor for CLI usage)
+func NewSensor(ctx context.Context, deps resource.Dependencies, name resource.Name, cfg *Config, logger logging.Logger) (sensor.Sensor, error) {
+	ps := &playbackSensor{
+		Named:  name.AsNamed(),
+		logger: logger,
+	}
+
+	// Create a proper config for Reconfigure
+	conf := resource.Config{
+		Name:                name.Name,
+		API:                 sensor.API,
+		Model:               Model,
+		ConvertedAttributes: cfg,
+	}
+
+	if err := ps.Reconfigure(ctx, deps, conf); err != nil {
+		return nil, err
+	}
+	return ps, nil
+}
+
 // Reconfigure handles the initial setup and subsequent configuration updates
-func (rs *replaySensor) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+func (rs *playbackSensor) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 
@@ -142,7 +163,7 @@ func (rs *replaySensor) Reconfigure(ctx context.Context, deps resource.Dependenc
 		return errors.New("end_time_utc must be after start_time_utc")
 	}
 
-	rs.logger.Infof("Configuring sensor-replay for component '%s' from %s to %s (speed: %.1fx, metadata: %t)",
+	rs.logger.Infof("Configuring sensor-playback for component '%s' from %s to %s (speed: %.1fx, metadata: %t)",
 		rs.cfg.SourceComponentName,
 		rs.startTime.Format(time.RFC3339),
 		rs.endTime.Format(time.RFC3339),
@@ -165,7 +186,7 @@ func mustEnv(name string) (string, error) {
 }
 
 // resolveAPICredentials reads API credentials strictly from environment
-func (rs *replaySensor) resolveAPICredentials() (string, string, error) {
+func (rs *playbackSensor) resolveAPICredentials() (string, string, error) {
 	apiKeyID, err := mustEnv("VIAM_API_KEY_ID")
 	if err != nil {
 		return "", "", err
@@ -181,7 +202,7 @@ func (rs *replaySensor) resolveAPICredentials() (string, string, error) {
 }
 
 // resolveOrganizationID uses VIAM_PRIMARY_ORG_ID from module environment
-func (rs *replaySensor) resolveOrganizationID() (string, error) {
+func (rs *playbackSensor) resolveOrganizationID() (string, error) {
 	org, ok := os.LookupEnv("VIAM_PRIMARY_ORG_ID")
 	if !ok || strings.TrimSpace(org) == "" {
 		return "", errors.New("VIAM_PRIMARY_ORG_ID is not set in module environment")
@@ -190,10 +211,10 @@ func (rs *replaySensor) resolveOrganizationID() (string, error) {
 	return org, nil
 }
 
-// fetchAndPrepareData connects to the Viam app, downloads, and prepares the data for replay
-func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
+// fetchAndPrepareData connects to the Viam app, downloads, and prepares the data for playback
+func (rs *playbackSensor) fetchAndPrepareData(ctx context.Context) {
 	fetchStart := time.Now()
-	rs.logger.Info("Starting data fetch for replay sensor...")
+	rs.logger.Info("Starting data fetch for playback sensor...")
 
 	// Resolve creds and org strictly from environment / safe defaults
 	apiKeyID, apiKey, err := rs.resolveAPICredentials()
@@ -246,7 +267,7 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 		Limit: 1000,
 	}
 
-	var allData []replayDataPoint
+	var allData []playbackDataPoint
 
 	for {
 		if ctx.Err() != nil {
@@ -267,7 +288,7 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 		if dataResponse != nil && dataResponse.TabularData != nil {
 			for _, dp := range dataResponse.TabularData {
 				if dp.Data != nil {
-					allData = append(allData, replayDataPoint{
+					allData = append(allData, playbackDataPoint{
 						timestamp: dp.TimeReceived,
 						readings:  dp.Data,
 					})
@@ -311,9 +332,9 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 
-	rs.replayData = allData
+	rs.playbackData = allData
 	rs.currentIndex = 0
-	rs.replayStartTime = time.Now()
+	rs.playbackStartTime = time.Now()
 	rs.isReady = true
 
 	// Update statistics
@@ -332,12 +353,12 @@ func (rs *replaySensor) fetchAndPrepareData(ctx context.Context) {
 	}
 }
 
-// Readings returns sensor data based on the replay timeline
-func (rs *replaySensor) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+// Readings returns sensor data based on the playback timeline
+func (rs *playbackSensor) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	rs.mu.RLock()
 	defer rs.mu.RUnlock()
 
-	if !rs.isReady || len(rs.replayData) == 0 {
+	if !rs.isReady || len(rs.playbackData) == 0 {
 		return map[string]interface{}{
 			"status": "loading",
 			"ready":  rs.isReady,
@@ -345,15 +366,15 @@ func (rs *replaySensor) Readings(ctx context.Context, extra map[string]interface
 	}
 
 	// Calculate elapsed time with speed multiplier
-	elapsed := time.Since(rs.replayStartTime)
+	elapsed := time.Since(rs.playbackStartTime)
 	if rs.cfg.SpeedMultiplier != 1.0 {
 		elapsed = time.Duration(float64(elapsed) * rs.cfg.SpeedMultiplier)
 	}
 
 	// Handle looping
-	if rs.cfg.Loop && len(rs.replayData) > 1 {
-		firstTimestamp := rs.replayData[0].timestamp
-		lastTimestamp := rs.replayData[len(rs.replayData)-1].timestamp
+	if rs.cfg.Loop && len(rs.playbackData) > 1 {
+		firstTimestamp := rs.playbackData[0].timestamp
+		lastTimestamp := rs.playbackData[len(rs.playbackData)-1].timestamp
 		totalDuration := lastTimestamp.Sub(firstTimestamp)
 
 		if elapsed > totalDuration {
@@ -368,7 +389,7 @@ func (rs *replaySensor) Readings(ctx context.Context, extra map[string]interface
 				rs.loopCount = loops
 				rs.stats.loopsCompleted = loops
 				rs.currentIndex = 0
-				rs.logger.Infof("Completed loop %d, restarting replay", loops)
+				rs.logger.Infof("Completed loop %d, restarting playback", loops)
 				rs.mu.Unlock()
 				rs.mu.RLock()
 			}
@@ -376,14 +397,14 @@ func (rs *replaySensor) Readings(ctx context.Context, extra map[string]interface
 	}
 
 	// Calculate the current position in historical time
-	currentHistoricalTime := rs.replayData[0].timestamp.Add(elapsed)
+	currentHistoricalTime := rs.playbackData[0].timestamp.Add(elapsed)
 
 	// Find the appropriate reading for the current time
 	var foundReading map[string]interface{}
 	foundIndex := rs.currentIndex
 
-	for i := rs.currentIndex; i < len(rs.replayData); i++ {
-		dp := rs.replayData[i]
+	for i := rs.currentIndex; i < len(rs.playbackData); i++ {
+		dp := rs.playbackData[i]
 		if dp.timestamp.After(currentHistoricalTime) {
 			break
 		}
@@ -405,7 +426,7 @@ func (rs *replaySensor) Readings(ctx context.Context, extra map[string]interface
 		// Before first data point
 		return map[string]interface{}{
 			"status":       "waiting_for_data",
-			"next_data_in": rs.replayData[0].timestamp.Sub(currentHistoricalTime).Seconds(),
+			"next_data_in": rs.playbackData[0].timestamp.Sub(currentHistoricalTime).Seconds(),
 		}, nil
 	}
 
@@ -422,12 +443,12 @@ func (rs *replaySensor) Readings(ctx context.Context, extra map[string]interface
 		}
 	}
 
-	// Add replay metadata if configured or requested via extra
+	// Add playback metadata if configured or requested via extra
 	includeMetadata := rs.cfg.IncludeMetadata || (extra != nil && extra["include_metadata"] == true)
 	if includeMetadata {
-		result["_replay_metadata"] = map[string]interface{}{
-			"historical_timestamp": rs.replayData[foundIndex].timestamp.Format(time.RFC3339),
-			"replay_position":      fmt.Sprintf("%d/%d", foundIndex+1, len(rs.replayData)),
+		result["_playback_metadata"] = map[string]interface{}{
+			"historical_timestamp": rs.playbackData[foundIndex].timestamp.Format(time.RFC3339),
+			"playback_position":    fmt.Sprintf("%d/%d", foundIndex+1, len(rs.playbackData)),
 			"loop_count":           rs.loopCount,
 			"speed_multiplier":     rs.cfg.SpeedMultiplier,
 		}
@@ -437,7 +458,7 @@ func (rs *replaySensor) Readings(ctx context.Context, extra map[string]interface
 }
 
 // DoCommand implements custom commands for the sensor
-func (rs *replaySensor) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+func (rs *playbackSensor) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	command, ok := cmd["command"].(string)
 	if !ok {
 		return nil, errors.New("command field is required")
@@ -463,8 +484,8 @@ func (rs *replaySensor) DoCommand(ctx context.Context, cmd map[string]interface{
 
 		rs.currentIndex = 0
 		rs.loopCount = 0
-		rs.replayStartTime = time.Now()
-		rs.logger.Info("Replay reset to beginning")
+		rs.playbackStartTime = time.Now()
+		rs.logger.Info("Playback reset to beginning")
 
 		return map[string]interface{}{"status": "reset"}, nil
 
@@ -485,15 +506,15 @@ func (rs *replaySensor) DoCommand(ctx context.Context, cmd map[string]interface{
 		rs.mu.Lock()
 		defer rs.mu.Unlock()
 
-		if len(rs.replayData) > 0 {
-			targetIndex := int(float64(len(rs.replayData)-1) * (percent / 100.0))
+		if len(rs.playbackData) > 0 {
+			targetIndex := int(float64(len(rs.playbackData)-1) * (percent / 100.0))
 			rs.currentIndex = targetIndex
 
-			// Adjust replay start time to match the jump
-			firstTime := rs.replayData[0].timestamp
-			targetTime := rs.replayData[targetIndex].timestamp
+			// Adjust playback start time to match the jump
+			firstTime := rs.playbackData[0].timestamp
+			targetTime := rs.playbackData[targetIndex].timestamp
 			timeOffset := targetTime.Sub(firstTime)
-			rs.replayStartTime = time.Now().Add(-timeOffset)
+			rs.playbackStartTime = time.Now().Add(-timeOffset)
 
 			rs.logger.Infof("Jumped to %d%% (index %d)", int(percent), targetIndex)
 
@@ -512,8 +533,8 @@ func (rs *replaySensor) DoCommand(ctx context.Context, cmd map[string]interface{
 }
 
 // Close gracefully shuts down the sensor
-func (rs *replaySensor) Close(ctx context.Context) error {
-	rs.logger.Info("Closing replay sensor")
+func (rs *playbackSensor) Close(ctx context.Context) error {
+	rs.logger.Info("Closing playback sensor")
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -525,7 +546,7 @@ func (rs *replaySensor) Close(ctx context.Context) error {
 
 	// Log final statistics
 	if rs.stats.totalDataPoints > 0 {
-		rs.logger.Infof("Replay sensor closed. Processed %d data points, completed %d loops",
+		rs.logger.Infof("Playback sensor closed. Processed %d data points, completed %d loops",
 			rs.stats.totalDataPoints, rs.stats.loopsCompleted)
 	}
 

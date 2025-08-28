@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
+
+	sensorplayback "github.com/hunter-volkman/sensor-playback"
 	sensor "go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
-	"sensorreplay"
 )
 
 func main() {
@@ -22,9 +23,9 @@ func realMain() error {
 	deps := resource.Dependencies{}
 	// can load these from a remote machine if you need
 
-	cfg := sensorreplay.Config{}
+	cfg := sensorplayback.Config{}
 
-	thing, err := sensorreplay.NewSensor(ctx, deps, sensor.Named("foo"), &cfg, logger)
+	thing, err := sensorplayback.NewSensor(ctx, deps, sensor.Named("foo"), &cfg, logger)
 	if err != nil {
 		return err
 	}

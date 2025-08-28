@@ -1,7 +1,7 @@
 package main
 
 import (
-	sensorreplay "github.com/hunter-volkman/sensor-replay"
+	sensorreplay "github.com/hunter-volkman/sensor-playback"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/module"
 	"go.viam.com/rdk/resource"

@@ -1,14 +1,14 @@
 {
   "$schema": "https://dl.viam.dev/module.schema.json",
-  "module_id": "hunter:sensor-replay",
+  "module_id": "hunter:sensor-playback",
   "visibility": "private",
-  "url": "https://github.com/hunter-volkman/viam-sensor-replay",
-  "description": "Sensor component for historical data replay from Viam's data management service for testing and simulation",
+  "url": "https://github.com/hunter-volkman/viam-sensor-playback",
+  "description": "Sensor component for historical data playback from Viam's data management service for testing and simulation",
   "models": [
     {
       "api": "rdk:component:sensor",
-      "model": "hunter:sensor-replay:sensor",
-      "markdown_link": "README.md#model-huntersensor-replaysensor"
+      "model": "hunter:sensor-playback:sensor",
+      "markdown_link": "README.md#model-huntersensor-playbacksensor"
     }
   ],
   "applications": null,
