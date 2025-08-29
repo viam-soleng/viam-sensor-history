@@ -1,7 +1,7 @@
 {
   "$schema": "https://dl.viam.dev/module.schema.json",
   "module_id": "hunter:sensor-playback",
-  "visibility": "private",
+  "visibility": "public",
   "url": "https://github.com/hunter-volkman/viam-sensor-playback",
   "description": "Sensor component for historical data playback from Viam's data management service for testing and simulation",
   "models": [
@@ -21,7 +21,8 @@
     "arch": [
       "linux/arm64",
       "darwin/arm64"
-    ]
+    ],
+    "darwin_deps": []
   },
   "entrypoint": "bin/module"
 }
