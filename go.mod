@@ -1,4 +1,4 @@
-module github.com/hunter-volkman/sensor-playback
+module github.com/hunter-volkman/sensor-history
 
 go 1.23.8
 
