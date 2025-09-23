@@ -3,11 +3,12 @@
   "module_id": "hunter:sensor-history",
   "visibility": "public",
   "url": "https://github.com/hunter-volkman/viam-sensor-history",
-  "description": "Sensor component for sensor history from Viam's data management service for testing and simulation",
+  "description": "Sensor history from Viam's data management service for testing or simulation",
   "models": [
     {
       "api": "rdk:component:sensor",
       "model": "hunter:sensor-history:sensor",
+      "short_description": "Sensor history from Viam's data management service for testing or simulation",
       "markdown_link": "README.md#model-huntersensor-historysensor"
     }
   ],
