@@ -130,7 +130,7 @@ func NewSensor(ctx context.Context, deps resource.Dependencies, name resource.Na
 }
 
 // Reconfigure handles the initial setup and subsequent configuration updates
-func (rs *historyDataPointSensor) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+func (rs *historySensor) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 
