@@ -1,4 +1,4 @@
-# Module sensor-history
+# Sensor History Module
 
 A Viam `sensor` component for sensor history from Viam's data management service.
 
