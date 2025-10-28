@@ -2,7 +2,7 @@
 
 A Viam `sensor` component for sensor history from Viam's data management service.
 
-## Model hunter:sensor-history:sensor
+## Model viam-soleng:sensor-history:sensor
 
 This model implements the `rdk:component:sensor` API by simulating a live sensor and fetching a dataset from a specified time range in real-time with configurable speed and looping.
 
