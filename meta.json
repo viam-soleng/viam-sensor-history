@@ -1,15 +1,15 @@
 {
   "$schema": "https://dl.viam.dev/module.schema.json",
-  "module_id": "hunter:sensor-history",
+  "module_id": "viam-soleng:sensor-history",
   "visibility": "public",
   "url": "https://github.com/viam-soleng/viam-sensor-history",
   "description": "Sensor history from Viam's data management service for testing or simulation",
   "models": [
     {
       "api": "rdk:component:sensor",
-      "model": "hunter:sensor-history:sensor",
+      "model": "viam-soleng:sensor-history:sensor",
       "short_description": "Sensor history from Viam's data management service for testing or simulation",
-      "markdown_link": "README.md#model-huntersensor-historysensor"
+      "markdown_link": "README.md#model-viam-solengsensor-historysensor"
     }
   ],
   "applications": null,
